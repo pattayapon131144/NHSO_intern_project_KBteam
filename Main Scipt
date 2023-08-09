@@ -1,0 +1,255 @@
+function onEdit(event) {
+  
+  addTimestamps(event) ;
+  calculateDateDifference() ;
+  FilterPartialMatchss(event);
+  InprocessIN(event);
+}
+
+
+
+function addTimestamps(event) {
+  var startRow = 2;
+  var startCol = 1; // Column A
+  var endCol = 7;   // Column G
+  var ws = "In Process";
+
+  var row = event.range.getRow();
+  var col = event.range.getColumn();
+
+  // ตรวจสอบว่าเกิดการลบคอลัมน์ A และอยู่ในแผ่นที่ต้องการ
+  if (event.changeType === "REMOVE_COLUMN" && col === 1 && event.source.getActiveSheet().getName() === ws) {
+    var sheet = event.source.getActiveSheet();
+    var numRows = sheet.getLastRow() - startRow + 1;
+    var range = sheet.getRange(row, 2, numRows, 2); // เลือกช่วงคอลัมน์ B และ C ที่อยู่ในแถวเดียวกับคอลัมน์ที่ถูกลบ
+    range.clearContent(); // ลบข้อมูลในคอลัมน์ B และ C ในแถวนั้น
+    return;
+  }
+
+  // ทำตามโค้ดเดิมที่ให้ timestamp ในคอลัมน์ B และ C ยกเว้นเมื่อลบคอลัมน์ A
+  if (row >= startRow && col >= startCol && col <= endCol && event.source.getActiveSheet().getName() === ws) {
+    var currentDate = new Date();
+
+    // เช็คว่าไม่ใช่การลบคอลัมน์ A และในการเปลี่ยนแปลงที่เกิดขึ้นต้องไม่เป็นการลบคอลัมน์ที่บันทึก timestamp
+    if (event.changeType !== "REMOVE_COLUMN" && col !== 2 && col !== 3) {
+      event.source.getActiveSheet().getRange(row, 2).setValue(currentDate);
+      if (event.source.getActiveSheet().getRange(row, 3).getValue() == "") {
+        event.source.getActiveSheet().getRange(row, 3).setValue(currentDate);
+      }
+    }
+  }
+}
+
+
+
+function calculateDateDifference() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var startColumn = 9; // Column I
+  var endColumn = 10; // Column J
+  var resultColumn = 11; // Column K
+
+  var data = sheet.getDataRange().getValues();
+  var result = [];
+
+  for (var i = 2; i < data.length; i++) { // Start from row 3 (index 2)
+    var startDate = data[i][startColumn - 1];
+    var endDate = data[i][endColumn - 1];
+    
+    if (startDate !== "") {
+      var actualEndDate = endDate !== "" ? endDate : new Date(); // Use NOW if endDate is empty
+      var diffInDays = Math.floor((actualEndDate - startDate) / (1000 * 60 * 60 * 24));
+      result.push([diffInDays]);
+    } else {
+      result.push([""]);
+    }
+  }
+
+  sheet.getRange(3, resultColumn, result.length, 1).setValues(result); // Start writing results from row 3 (index 2)
+}
+
+
+
+function FilterPartialMatchss(event) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var loanSht = ss.getSheetByName("Complete");
+  var Criteria = loanSht.getRange("T2").getValue().toString().toLowerCase();
+  
+  // ตรวจสอบว่า T2 มีค่าว่างหรือไม่
+  if (Criteria === "") {
+    // ถ้า T2 เป็นค่าว่างให้ล้างเนื้อหาในช่วงที่กรองอยู่และออกจากฟังก์ชัน
+    loanSht.getRange(6, 20, loanSht.getLastRow() - 5, 20).clearContent();
+    return;
+  }
+  
+  // รีเซ็ตข้อมูลเก่าในช่วงที่กรองเก่า
+  loanSht.getRange(6, 20, loanSht.getLastRow() - 5, 20).clearContent();
+  
+  var dRng = loanSht.getRange("A2").getDataRegion().getValues();
+  var fRng = dRng.filter(function(e) {
+     return (e[0].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[1].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[2].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[3].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[4].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[5].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[6].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[7].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[8].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[9].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[10].toString().toLowerCase().indexOf(Criteria) !== -1)||
+           (e[11].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[12].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[13].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[14].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[15].toString().toLowerCase().indexOf(Criteria) !== -1) ;
+  });
+  
+  // ล้างข้อมูลเก่าในช่วง T6:V เพื่อรองรับข้อมูลใหม่
+  loanSht.getRange(6, 20, loanSht.getLastRow() - 5, 20).clearContent();
+  
+  // เพิ่มข้อมูลใหม่ในช่วง T6:V
+  loanSht.getRange(6, 20, fRng.length, fRng[0].length).setValues(fRng);
+
+  // เก็บค่าของการค้นหาล่าสุดลงใน Properties
+  var userProperties = PropertiesService.getUserProperties();
+  userProperties.setProperty('lastSearchCriteria', Criteria);
+}
+
+function clearT2s() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var loanSht = ss.getSheetByName("Complete");
+  
+  // ล้างข้อมูลในช่อง T2
+  loanSht.getRange("T2").clearContent();
+  
+  // ล้างข้อมูลในช่วงที่กรอง
+  loanSht.getRange(6, 20, loanSht.getLastRow() - 5, 14).clearContent();
+}
+
+
+function InprocessIN(event) {
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var s = event.source.getActiveSheet();
+  var r = event.source.getActiveRange();
+  if(s.getName() == "In Process" && r.getColumn() == 14 && r.getValue() == "Complete") {  
+    var row = r.getRow();
+    var numColumns = s.getLastColumn();
+    var targetSheet = ss.getSheetByName("Complete"); //ชื่อ Sheet ที่ต้องการให้ข้อมูลย้ายไป
+    var target = targetSheet.getRange(targetSheet.getLastRow() + 1, 1);
+    s.getRange(row, 1, 1, numColumns).moveTo(target);
+    s.deleteRow(row);
+  }    
+  if(s.getName() == "Complete" && r.getColumn() == 14 && r.getValue() != "Complete") {
+    var row = r.getRow();
+    var numColumns = s.getLastColumn();
+    var targetSheet = ss.getSheetByName("In Process");
+    var target = targetSheet.getRange(targetSheet.getLastRow()+ 1, 1);
+    s.getRange(row, 1, 1, numColumns).moveTo(target);
+    s.deleteRow(row);
+  
+  }
+}
+
+
+
+
+
+
+
+
+/////////////////// ไม่ได้ใช้งาน KB sheet แล้ว /////////////////// 
+
+
+
+
+
+
+
+
+
+
+function FilterPartialMatchss_KBsheetsS(event) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var loanSht = ss.getSheetByName("KB");
+  var Criteria = loanSht.getRange("T2").getValue().toLowerCase();
+  
+  // ตรวจสอบว่า T2 มีค่าว่างหรือไม่
+  if (Criteria === "") {
+    // ถ้า T2 เป็นค่าว่างให้ล้างเนื้อหาในช่วงที่กรองอยู่และออกจากฟังก์ชัน
+    loanSht.getRange(6, 20, loanSht.getLastRow() - 5, 20).clearContent();
+    return;
+  }
+  
+  // รีเซ็ตข้อมูลเก่าในช่วงที่กรองเก่า
+  loanSht.getRange(6, 20, loanSht.getLastRow() - 5, 20).clearContent();
+  
+  var dRng = loanSht.getRange("A2").getDataRegion().getValues();
+  var fRng = dRng.filter(function(e) {
+     return (typeof e[0].value === "number") || 
+           (e[3].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[4].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[5].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[6].toString().toLowerCase().indexOf(Criteria) !== -1) || 
+           (e[7].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[8].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[9].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[10].toString().toLowerCase().indexOf(Criteria) !== -1)||
+           (e[11].toString().toLowerCase().indexOf(Criteria) !== -1) ||
+           (e[12].toString().toLowerCase().indexOf(Criteria) !== -1) ;
+  });
+  
+  // ล้างข้อมูลเก่าในช่วง T6:V เพื่อรองรับข้อมูลใหม่
+  loanSht.getRange(6, 20, loanSht.getLastRow() - 5, 3).clearContent();
+  
+  // เพิ่มข้อมูลใหม่ในช่วง T6:V
+  loanSht.getRange(6, 20, fRng.length, fRng[0].length).setValues(fRng);
+
+  // เก็บค่าของการค้นหาล่าสุดลงใน Properties
+  var userProperties = PropertiesService.getUserProperties();
+  userProperties.setProperty('lastSearchCriteria', Criteria);
+}
+
+function KBsheets(event) {
+
+ var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var s = event.source.getActiveSheet();
+  var r = event.source.getActiveRange();
+
+  if (s.getName() == "KB" && r.getColumn() == 15 && r.getValue() != "Added") {
+    var row = r.getRow();
+    var numColumns = s.getLastColumn();
+    var targetSheet = ss.getSheetByName("Complete");
+    var target = targetSheet.getRange(targetSheet.getLastRow() + 1, 1);
+    s.getRange(row, 1, 1, numColumns).moveTo(target);
+    s.deleteRow(row);
+  }
+
+  if (s.getName() == "Complete" && r.getColumn() == 15 && r.getValue() == "Added") {
+    var row = r.getRow();
+    var numColumns = s.getLastColumn();
+    var targetSheet = ss.getSheetByName("KB");
+    var target = targetSheet.getRange(targetSheet.getLastRow() + 1, 1);
+    s.getRange(row, 1, 1, numColumns).moveTo(target);
+    s.deleteRow(row);
+  }
+
+  if (s.getName() == "Complete" && r.getColumn() == 15 && r.getValue() != "Added") {
+    var row = r.getRow();
+    var numColumns = s.getLastColumn();
+    var targetSheet = ss.getSheetByName("Complete");
+    var target = targetSheet.getRange(targetSheet.getLastRow() + 1, 1);
+    s.getRange(row, 1, 1, numColumns).moveTo(target);
+    s.deleteRow(row);
+  }
+    if (s.getName() == "KB" && r.getColumn() == 14 && r.getValue() != "Complete") {
+    var row = r.getRow();
+    var numColumns = s.getLastColumn();
+    var targetSheet = ss.getSheetByName("In Process");
+    var target = targetSheet.getRange(targetSheet.getLastRow() + 1, 1);
+    s.getRange(row, 1, 1, numColumns).moveTo(target);
+    s.deleteRow(row);
+  }
+}
+
+
